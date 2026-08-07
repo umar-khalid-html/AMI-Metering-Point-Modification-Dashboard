@@ -21,15 +21,15 @@ fetch(url)
   .then(r => r.text())
   .then(text => {
     const json = JSON.parse(text.substring(47).slice(0, -2));
-    const rows = json.table.rows;
-    const labels = rows[0].c.map(c => c ? c.v : "");
-    const values = rows[1].c.map(c => c ? c.v : "");
+    const labels = json.table.cols.map(c => c.label);
+    const values = json.table.rows[0].c.map(c => c ? c.v : "");
     const cardsDiv = document.getElementById("cards");
     labels.forEach((label, i) => {
       if (!label) return;
       cardsDiv.innerHTML += `<div class="card"><div class="label">${label}</div>
         <div class="value">${values[i]}</div></div>`;
     });
-  });  </script>
+  });
+ </script>
 </body>
 </html>
