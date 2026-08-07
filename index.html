@@ -15,23 +15,21 @@
   <div id="cards"></div>
   <script>
     const SHEET_ID = "1J5m0ai1eTZplO2Hz9jWhtJEjVe0757dHMq7Ckl6Olh0";
-    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=Dashboard`;
+const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=Dashboard&range=B4:F5`;
 
-    fetch(url)
-      .then(r => r.text())
-      .then(text => {
-        const json = JSON.parse(text.substring(47).slice(0, -2)); // strips Google's JS wrapper
-        const rows = json.table.rows;
-        // Dashboard!B4:F5 = labels row then values row
-        const labels = rows[0].c.map(c => c && c.v);
-        const values = rows[1].c.map(c => c && c.v);
-        const cardsDiv = document.getElementById("cards");
-        labels.forEach((label, i) => {
-          if (!label) return;
-          cardsDiv.innerHTML += `<div class="card"><div class="label">${label}</div>
-            <div class="value">${values[i]}</div></div>`;
-        });
-      });
-  </script>
+fetch(url)
+  .then(r => r.text())
+  .then(text => {
+    const json = JSON.parse(text.substring(47).slice(0, -2));
+    const rows = json.table.rows;
+    const labels = rows[0].c.map(c => c ? c.v : "");
+    const values = rows[1].c.map(c => c ? c.v : "");
+    const cardsDiv = document.getElementById("cards");
+    labels.forEach((label, i) => {
+      if (!label) return;
+      cardsDiv.innerHTML += `<div class="card"><div class="label">${label}</div>
+        <div class="value">${values[i]}</div></div>`;
+    });
+  });  </script>
 </body>
 </html>
