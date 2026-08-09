@@ -277,6 +277,7 @@ async function loadDashboard(isManual){
     const remaining = kMap["Remaining"] || 0;
     const completePct = kMap["% Complete"] || 0;
     const completionRate = kMap["Completion Rate"] || 0;
+    const carryoverRate = 1 - completionRate;
 
     const kpiCards = document.getElementById("kpiCards");
     kpiCards.innerHTML = `
@@ -284,7 +285,7 @@ async function loadDashboard(isManual){
       <div class="card"><div class="k">Completed</div><div class="v green">${fmtNum(completed)}</div></div>
       <div class="card"><div class="k">Remaining</div><div class="v">${fmtNum(remaining)}</div></div>
       <div class="card"><div class="k">% Complete</div><div class="v green">${pct(completePct)}</div></div>
-      <div class="card"><div class="k">Completion Rate</div><div class="v ${completionRate >= 0.9 ? "green" : completionRate >= 0.7 ? "amber" : "red"}">${pct(completionRate)}</div><div class="sub">of assigned meters</div></div>
+      <div class="card"><div class="k">Carryover Rate</div><div class="v ${carryoverRate <= 0.1 ? "green" : carryoverRate <= 0.3 ? "amber" : "red"}">${pct(carryoverRate)}</div><div class="sub">of assigned meters roll to next day</div></div>
     `;
 
     const donePctNum = completePct * 100;
@@ -324,7 +325,7 @@ async function loadDashboard(isManual){
     const gaugeRow = document.getElementById("gaugeRow");
     gaugeRow.innerHTML =
       ringHTML(completePct * 100, "var(--green)", "Overall Complete") +
-      ringHTML(completionRate * 100, completionRate >= 0.9 ? "var(--green)" : completionRate >= 0.7 ? "var(--amber)" : "var(--red)", "Completion Rate") +
+      ringHTML(carryoverRate * 100, carryoverRate <= 0.1 ? "var(--green)" : carryoverRate <= 0.3 ? "var(--amber)" : "var(--red)", "Carryover Rate") +
       ringHTML(divRows.length ? (divRows.filter(r => (cellVal(r.c[5]) || 0) >= (completePct || 0)).length / divRows.length) * 100 : 0,
                 "var(--amber)", "Divisions On Pace");
 
