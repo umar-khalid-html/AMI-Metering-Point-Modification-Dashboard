@@ -1,35 +1,323 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>AMI Meter Modification Dashboard</title>
-  <style>
-    body { font-family: Arial, sans-serif; background:#f4f6f9; padding:30px; }
-    .card { display:inline-block; background:#fff; border-radius:8px; padding:20px 30px;
-             margin:10px; box-shadow:0 1px 4px rgba(0,0,0,.1); text-align:center; }
-    .label { color:#2E5A9C; font-weight:bold; font-size:14px; }
-    .value { color:#1F3864; font-size:28px; font-weight:bold; margin-top:6px; }
-  </style>
+<meta charset="UTF-8">
+<title>AMI Meter Modification — Live Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0b0f14;
+    --panel:#12171f;
+    --panel-border:#212a35;
+    --text:#e6edf3;
+    --muted:#7d8a9a;
+    --green:#3ddc84;
+    --green-dim:#1c3d2b;
+    --amber:#f5a623;
+    --amber-dim:#3d2f14;
+    --red:#f0553f;
+    --red-dim:#3d1f18;
+    --gray-bar:#2a323d;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--sans); padding:28px 32px 60px;
+  }
+  h1{
+    font-size:15px; letter-spacing:2px; text-transform:uppercase;
+    color:var(--muted); font-weight:600; margin:0 0 4px;
+  }
+  .updated{ font-size:12px; color:var(--muted); margin-bottom:26px; font-family:var(--mono); }
+  .updated span{ color:var(--green); }
+
+  .section-label{
+    font-size:12px; letter-spacing:2px; text-transform:uppercase;
+    color:var(--muted); font-weight:700; margin:34px 0 12px;
+  }
+
+  .cardrow{ display:flex; gap:14px; flex-wrap:wrap; }
+  .card{
+    background:var(--panel); border:1px solid var(--panel-border); border-radius:10px;
+    padding:16px 20px; flex:1; min-width:150px;
+  }
+  .card .k{ font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+  .card .v{ font-size:28px; font-weight:700; font-family:var(--mono); }
+  .card .v.green{ color:var(--green); }
+  .card .v.amber{ color:var(--amber); }
+  .card .v.red{ color:var(--red); }
+  .card .sub{ font-size:11px; color:var(--muted); margin-top:4px; font-family:var(--mono); }
+
+  .segbar{ display:flex; height:10px; border-radius:6px; overflow:hidden; margin-top:14px; background:var(--gray-bar); }
+  .segbar .seg-done{ background:var(--green); }
+  .segbar .seg-err{ background:var(--red); }
+  .legend{ display:flex; gap:18px; margin-top:10px; font-size:11px; color:var(--muted); font-family:var(--mono); }
+  .legend .dot{ display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:6px; vertical-align:middle; }
+
+  .divgrid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+  .divcard{ background:var(--panel); border:1px solid var(--panel-border); border-radius:10px; padding:14px 16px; }
+  .divcard .name{ font-size:12px; font-weight:700; letter-spacing:1px; }
+  .divcard .area{ font-size:11px; color:var(--muted); margin-bottom:10px; }
+  .divcard .nums{ display:flex; justify-content:space-between; font-family:var(--mono); font-size:12px; color:var(--muted); margin-top:8px; }
+  .divcard .nums b{ color:var(--text); }
+  .divcard .bar{ height:7px; border-radius:4px; background:var(--gray-bar); overflow:hidden; }
+  .divcard .bar i{ display:block; height:100%; background:var(--green); }
+
+  .gaugerow{ display:flex; gap:24px; flex-wrap:wrap; align-items:center; background:var(--panel);
+             border:1px solid var(--panel-border); border-radius:10px; padding:22px; }
+  .gauge{ text-align:center; }
+  .ring{ width:104px; height:104px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+         position:relative; margin:0 auto 10px; }
+  .ring .hole{ position:absolute; width:78px; height:78px; border-radius:50%; background:var(--panel);
+               display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-weight:700; font-size:16px; }
+  .gauge .glabel{ font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); }
+
+  .trendrow{ display:grid; grid-template-columns:repeat(7,1fr); gap:12px; }
+  .trendcard{ background:var(--panel); border:1px solid var(--panel-border); border-radius:10px; padding:12px; }
+  .trendcard .tdate{ font-size:11px; color:var(--muted); font-family:var(--mono); margin-bottom:8px; }
+  .trendcard .bars{ display:flex; align-items:flex-end; height:70px; }
+  .trendcard .bars .fill{ width:100%; background:var(--green); border-radius:3px 3px 0 0; min-height:2px; }
+  .trendcard .tval{ font-family:var(--mono); font-weight:700; font-size:13px; margin-top:6px; }
+
+  .empty-note{ color:var(--muted); font-size:12px; font-family:var(--mono); padding:20px; text-align:center; }
+  .err-note{ color:var(--red); font-size:12px; font-family:var(--mono); padding:14px; border:1px solid var(--red-dim); border-radius:8px; background:var(--red-dim); margin-top:10px; }
+
+  @media (max-width:760px){
+    .trendrow{ grid-template-columns:repeat(4,1fr); }
+  }
+</style>
 </head>
 <body>
-  <h2 style="color:#1F3864;">AMI Meter Modification — Live Dashboard</h2>
-  <div id="cards"></div>
-  <script>
-    const SHEET_ID = "1J5m0ai1eTZplO2Hz9jWhtJEjVe0757dHMq7Ckl6Olh0";
-const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=Dashboard&range=B4:F5`;
 
-fetch(url)
-  .then(r => r.text())
-  .then(text => {
-    const json = JSON.parse(text.substring(47).slice(0, -2));
-    const labels = json.table.cols.map(c => c.label);
-    const values = json.table.rows[0].c.map(c => c ? c.v : "");
-    const cardsDiv = document.getElementById("cards");
-    labels.forEach((label, i) => {
-      if (!label) return;
-      cardsDiv.innerHTML += `<div class="card"><div class="label">${label}</div>
-        <div class="value">${values[i]}</div></div>`;
-    });
+  <h1>AMI Operation Center — Meter Modification</h1>
+  <div class="updated">Live from Google Sheets · last loaded <span id="loadedAt">—</span></div>
+
+  <div class="section-label">Overall Progress</div>
+  <div class="cardrow" id="kpiCards"></div>
+  <div class="segbar" id="segBar"></div>
+  <div class="legend">
+    <span><i class="dot" style="background:var(--green)"></i>Completed</span>
+    <span><i class="dot" style="background:var(--gray-bar)"></i>Remaining</span>
+    <span><i class="dot" style="background:var(--red)"></i>Errors / Rejected</span>
+  </div>
+
+  <div class="section-label">Divisions</div>
+  <div class="divgrid" id="divGrid"></div>
+
+  <div class="section-label">Performance</div>
+  <div class="gaugerow" id="gaugeRow"></div>
+
+  <div class="section-label">Last 7 Days — Meters Completed</div>
+  <div class="trendrow" id="trendRow"></div>
+
+  <div id="errBox"></div>
+
+<script>
+/* ============================================================
+   CONFIG — the only two things you should ever need to change
+   ============================================================ */
+const SHEET_ID = "1J5m0ai1eTZplO2Hz9jWhtJEjVe0757dHMq7Ckl6Olh0";
+const SHEET_NAME = "Dashboard";          // tab holding the KPI cells
+const DIVISION_SHEET_NAME = "Division Master";
+
+/* ============================================================
+   Helpers — data is loaded via JSONP (a <script> tag), not fetch().
+   Google's endpoint doesn't send the CORS headers a cross-site
+   fetch() needs, so fetch() fails with "Failed to fetch" even
+   though the same URL opens fine when you visit it directly.
+   JSONP sidesteps that entirely since <script> tags aren't
+   subject to CORS.
+   ============================================================ */
+let __jsonpCounter = 0;
+function jsonp(url){
+  return new Promise((resolve, reject) => {
+    const cbName = "__gvizCb" + (__jsonpCounter++);
+    const script = document.createElement("script");
+    let settled = false;
+    window[cbName] = (data) => {
+      settled = true;
+      resolve(data);
+      delete window[cbName];
+      script.remove();
+    };
+    script.onerror = () => {
+      if (!settled) reject(new Error("Could not reach the Google Sheet (network or sharing issue)"));
+      delete window[cbName];
+      script.remove();
+    };
+    script.src = url + `&tqx=out:json;responseHandler:${cbName}`;
+    document.body.appendChild(script);
+    setTimeout(() => {
+      if (!settled) reject(new Error("Timed out waiting for the Google Sheet to respond"));
+    }, 10000);
   });
- </script>
+}
+
+function gvizUrl(sheet, range){
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=${encodeURIComponent(sheet)}&range=${range}`;
+}
+
+async function fetchGviz(sheet, range){
+  return jsonp(gvizUrl(sheet, range));
+}
+
+function cellVal(cell){
+  return cell ? cell.v : null;
+}
+
+function fmtDate(v){
+  // gviz returns dates as Date(YYYY,M,D) objects already parsed by google's own
+  // reviver in some cases, but raw JSON gives them as strings like "Date(2026,7,10)"
+  if (v == null) return "";
+  if (typeof v === "object" && v.constructor === Date) {
+    return v.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+  return String(v);
+}
+
+function parseGvizDate(v){
+  // Turns the literal string "Date(2026,7,10)" into a real JS Date.
+  if (v == null) return null;
+  const m = /^Date\((\d+),(\d+),(\d+)/.exec(String(v));
+  if (!m) return null;
+  return new Date(parseInt(m[1]), parseInt(m[2]), parseInt(m[3]));
+}
+
+function fmtNum(v){
+  if (v == null || v === "") return "—";
+  if (typeof v === "number") return v.toLocaleString();
+  return v;
+}
+
+function pct(v){
+  if (v == null) return "0.0%";
+  return (v * 100).toFixed(1) + "%";
+}
+
+function showError(msg){
+  document.getElementById("errBox").innerHTML =
+    `<div class="err-note">Couldn't load live data: ${msg}<br>Check that SHEET_ID is your real sheet's ID and that its sharing is set to "Anyone with the link".</div>`;
+}
+
+/* ============================================================
+   Ring gauge builder
+   ============================================================ */
+function ringHTML(pctValue, color, label){
+  const clamped = Math.max(0, Math.min(100, pctValue));
+  return `
+    <div class="gauge">
+      <div class="ring" style="background:conic-gradient(${color} ${clamped * 3.6}deg, #232b35 0deg)">
+        <div class="hole">${clamped.toFixed(0)}%</div>
+      </div>
+      <div class="glabel">${label}</div>
+    </div>`;
+}
+
+/* ============================================================
+   Main
+   ============================================================ */
+async function loadDashboard(){
+  try {
+    const [kpi, divs, trend] = await Promise.all([
+      fetchGviz(SHEET_NAME, "B4:F5"),
+      fetchGviz(DIVISION_SHEET_NAME, "B4:G10"),
+      fetchGviz(SHEET_NAME, "I4:K200"),
+    ]);
+
+    /* ---- KPI cards ---- */
+    const kpiLabels = kpi.table.cols.map(c => c.label);
+    const kpiValues = kpi.table.rows[0].c.map(cellVal);
+    const kMap = {};
+    kpiLabels.forEach((l, i) => kMap[l] = kpiValues[i]);
+
+    const total = kMap["Total Target"] || 0;
+    const completed = kMap["Total Completed"] || 0;
+    const remaining = kMap["Remaining"] || 0;
+    const completePct = kMap["% Complete"] || 0;
+    const errorRate = kMap["Error Rate"] || 0;
+
+    const kpiCards = document.getElementById("kpiCards");
+    kpiCards.innerHTML = `
+      <div class="card"><div class="k">Total Target</div><div class="v">${fmtNum(total)}</div></div>
+      <div class="card"><div class="k">Completed</div><div class="v green">${fmtNum(completed)}</div></div>
+      <div class="card"><div class="k">Remaining</div><div class="v">${fmtNum(remaining)}</div></div>
+      <div class="card"><div class="k">% Complete</div><div class="v green">${pct(completePct)}</div></div>
+      <div class="card"><div class="k">Error Rate</div><div class="v ${errorRate > 0.02 ? "red" : "amber"}">${pct(errorRate)}</div></div>
+    `;
+
+    const donePctNum = completePct * 100;
+    document.getElementById("segBar").innerHTML =
+      `<div class="seg-done" style="width:${donePctNum}%"></div>`;
+
+    /* ---- Division cards ---- */
+    const divRows = divs.table.rows;
+    const divGrid = document.getElementById("divGrid");
+    divGrid.innerHTML = "";
+    divRows.forEach(row => {
+      const c = row.c;
+      const code = cellVal(c[0]);
+      const area = cellVal(c[1]);
+      const target = cellVal(c[2]) || 0;
+      const done = cellVal(c[3]) || 0;
+      const rem = cellVal(c[4]) || 0;
+      const p = cellVal(c[5]) || 0;
+      if (!code) return;
+      divGrid.innerHTML += `
+        <div class="divcard">
+          <div class="name">${code}</div>
+          <div class="area">${area || ""}</div>
+          <div class="bar"><i style="width:${(p * 100).toFixed(1)}%"></i></div>
+          <div class="nums">
+            <span>Target <b>${fmtNum(target)}</b></span>
+            <span>Done <b>${fmtNum(done)}</b></span>
+            <span>${pct(p)}</span>
+          </div>
+        </div>`;
+    });
+    if (!divGrid.innerHTML) {
+      divGrid.innerHTML = `<div class="empty-note">No division data yet — fill in the Division Master sheet.</div>`;
+    }
+
+    /* ---- Gauges ---- */
+    const gaugeRow = document.getElementById("gaugeRow");
+    gaugeRow.innerHTML =
+      ringHTML(completePct * 100, "var(--green)", "Overall Complete") +
+      ringHTML(Math.min(100, (1 - errorRate) * 100), errorRate > 0.02 ? "var(--red)" : "var(--green)", "Accuracy Rate") +
+      ringHTML(divRows.length ? (divRows.filter(r => (cellVal(r.c[5]) || 0) >= (completePct || 0)).length / divRows.length) * 100 : 0,
+                "var(--amber)", "Divisions On Pace");
+
+    /* ---- Trend (last 7 logged days) ---- */
+    const trendRows = trend.table.rows
+      .map(r => ({ date: parseGvizDate(cellVal(r.c[0])), daily: cellVal(r.c[1]) || 0 }))
+      .filter(r => r.date && r.date <= new Date());
+    const last7 = trendRows.slice(-7);
+    const maxVal = Math.max(1, ...last7.map(r => r.daily));
+    const trendRow = document.getElementById("trendRow");
+    trendRow.innerHTML = "";
+    if (last7.length === 0) {
+      trendRow.innerHTML = `<div class="empty-note" style="grid-column:1/-1">No entries logged yet — this fills in once the Daily Log has data.</div>`;
+    } else {
+      last7.forEach(r => {
+        const h = Math.max(4, Math.round((r.daily / maxVal) * 60));
+        trendRow.innerHTML += `
+          <div class="trendcard">
+            <div class="tdate">${r.date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div>
+            <div class="bars"><div class="fill" style="height:${h}px"></div></div>
+            <div class="tval">${fmtNum(r.daily)}</div>
+          </div>`;
+      });
+    }
+
+    document.getElementById("loadedAt").textContent = new Date().toLocaleString();
+
+  } catch (e) {
+    showError(e.message || String(e));
+  }
+}
+
+loadDashboard();
+</script>
 </body>
 </html>
