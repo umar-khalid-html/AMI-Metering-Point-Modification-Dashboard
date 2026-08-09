@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>AMI Operation Center - Reference Number Modification in MDMS</title>
+<title>AMI Meter Modification — Live Dashboard</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root{
@@ -84,14 +84,22 @@
   .empty-note{ color:var(--muted); font-size:12px; font-family:var(--mono); padding:20px; text-align:center; }
   .err-note{ color:var(--red); font-size:12px; font-family:var(--mono); padding:14px; border:1px solid var(--red-dim); border-radius:8px; background:var(--red-dim); margin-top:10px; }
 
+  .chartrow{ display:flex; gap:16px; flex-wrap:wrap; }
+  .chartcard{ background:var(--panel); border:1px solid var(--panel-border); border-radius:10px;
+              padding:18px; flex:1; min-width:320px; }
+  .chartcard .ctitle{ font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--muted);
+                       font-weight:700; margin-bottom:14px; }
+  .chartcard canvas{ max-height:280px; }
+
   @media (max-width:760px){
     .trendrow{ grid-template-columns:repeat(4,1fr); }
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 </head>
 <body>
 
-  <h1>AMI Operation Center - Reference Number Modification in MDMS</h1>
+  <h1>AMI Operation Center — Meter Modification</h1>
   <div class="updated">Live from Google Sheets · last loaded <span id="loadedAt">—</span></div>
 
   <div class="section-label">Overall Progress</div>
@@ -105,6 +113,18 @@
 
   <div class="section-label">Divisions</div>
   <div class="divgrid" id="divGrid"></div>
+
+  <div class="section-label">Trends</div>
+  <div class="chartrow">
+    <div class="chartcard">
+      <div class="ctitle">Cumulative Meters Completed</div>
+      <canvas id="cumulativeChart"></canvas>
+    </div>
+    <div class="chartcard">
+      <div class="ctitle">Target vs. Completed by Division</div>
+      <canvas id="divisionChart"></canvas>
+    </div>
+  </div>
 
   <div class="section-label">Performance</div>
   <div class="gaugerow" id="gaugeRow"></div>
@@ -312,9 +332,102 @@ async function loadDashboard(){
 
     document.getElementById("loadedAt").textContent = new Date().toLocaleString();
 
+    /* ---- Charts ---- */
+    buildCharts(trendRows, divRows, total);
+
   } catch (e) {
     showError(e.message || String(e));
   }
+}
+
+/* ============================================================
+   Chart.js setup — dark theme to match the rest of the page
+   ============================================================ */
+let cumulativeChartInstance = null;
+let divisionChartInstance = null;
+
+function buildCharts(trendRows, divRows, total){
+  if (typeof Chart === "undefined") return; // CDN blocked/offline — page still works without charts
+
+  Chart.defaults.color = "#7d8a9a";
+  Chart.defaults.borderColor = "#212a35";
+  Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif";
+
+  /* ---- Cumulative Meters Completed (line) ---- */
+  const loggedRows = trendRows.filter(r => r.daily > 0 || r.date <= new Date());
+  let running = 0;
+  const cumPoints = trendRows.map(r => { running += r.daily; return running; });
+  const labels = trendRows.map(r => r.date.toLocaleDateString(undefined, { month: "short", day: "numeric" }));
+
+  const cumCtx = document.getElementById("cumulativeChart");
+  if (cumulativeChartInstance) cumulativeChartInstance.destroy();
+  cumulativeChartInstance = new Chart(cumCtx, {
+    type: "line",
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: "Cumulative Completed",
+          data: cumPoints,
+          borderColor: "#3ddc84",
+          backgroundColor: "rgba(61,220,132,0.12)",
+          fill: true,
+          tension: 0.25,
+          pointRadius: 0,
+          borderWidth: 2,
+        },
+        {
+          label: "Target",
+          data: labels.map(() => total),
+          borderColor: "#f5a623",
+          borderDash: [6, 6],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: {
+        x: { grid: { color: "#1a212a" }, ticks: { maxTicksLimit: 8, font: { size: 10 } } },
+        y: { grid: { color: "#1a212a" }, ticks: { font: { size: 10 },
+              callback: (v) => v >= 1000 ? (v / 1000) + "k" : v } },
+      },
+    },
+  });
+  cumCtx.parentElement.style.height = "280px";
+
+  /* ---- Target vs Completed by Division (bar) ---- */
+  const divLabels = divRows.map(r => cellVal(r.c[0])).filter(Boolean);
+  const divTargets = divRows.map(r => cellVal(r.c[2]) || 0);
+  const divCompleted = divRows.map(r => cellVal(r.c[3]) || 0);
+
+  const divCtx = document.getElementById("divisionChart");
+  if (divisionChartInstance) divisionChartInstance.destroy();
+  divisionChartInstance = new Chart(divCtx, {
+    type: "bar",
+    data: {
+      labels: divLabels,
+      datasets: [
+        { label: "Target", data: divTargets, backgroundColor: "#2a323d", borderRadius: 4 },
+        { label: "Completed", data: divCompleted, backgroundColor: "#3ddc84", borderRadius: 4 },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+        y: { grid: { color: "#1a212a" }, ticks: { font: { size: 10 },
+              callback: (v) => v >= 1000 ? (v / 1000) + "k" : v } },
+      },
+    },
+  });
+  divCtx.parentElement.style.height = "280px";
 }
 
 loadDashboard();
