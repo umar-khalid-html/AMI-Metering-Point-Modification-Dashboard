@@ -95,18 +95,24 @@
   .empty-note{ color:var(--muted); font-size:12px; font-family:var(--mono); padding:20px; text-align:center; }
   .err-note{ color:var(--red); font-size:12px; font-family:var(--mono); padding:14px; border:1px solid var(--red-dim); border-radius:8px; background:var(--red-dim); margin-top:10px; }
 
-  .chartrow{ display:flex; gap:16px; flex-wrap:wrap; }
-  .chartcard{ background:var(--panel); border:1px solid var(--panel-border); border-radius:10px;
-              padding:18px; flex:1; min-width:320px; }
+  .chartcard{ background:var(--panel); border:1px solid var(--panel-border); border-radius:10px; padding:18px; }
   .chartcard .ctitle{ font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--muted);
                        font-weight:700; margin-bottom:14px; }
-  .chartcard canvas{ max-height:280px; }
+  .stafftable-wrap{ overflow-x:auto; }
+  table.stafftable{ border-collapse:collapse; width:100%; font-size:12px; font-family:var(--mono); white-space:nowrap; }
+  table.stafftable th, table.stafftable td{ padding:8px 12px; text-align:center; border-bottom:1px solid var(--panel-border); }
+  table.stafftable th{ color:var(--muted); text-transform:uppercase; font-size:10px; letter-spacing:0.5px; font-weight:700; }
+  table.stafftable td.name-cell, table.stafftable th.name-col{ text-align:left; font-family:var(--sans); }
+  table.stafftable td.name-cell .division{ color:var(--muted); font-size:10px; display:block; }
+  table.stafftable td.zero{ color:#3a4452; }
+  table.stafftable td.hasval{ color:var(--green); font-weight:700; }
+  table.stafftable td.total-cell{ font-weight:700; color:var(--text); border-left:1px solid var(--panel-border); }
+  table.stafftable tr:hover td{ background:#151c25; }
 
   @media (max-width:760px){
     .trendrow{ grid-template-columns:repeat(4,1fr); }
   }
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -131,15 +137,9 @@
   <div class="divgrid" id="divGrid"></div>
 
   <div class="section-label">Trends</div>
-  <div class="chartrow">
-    <div class="chartcard">
-      <div class="ctitle">Cumulative Meters Completed</div>
-      <canvas id="cumulativeChart"></canvas>
-    </div>
-    <div class="chartcard">
-      <div class="ctitle">Target vs. Completed by Division</div>
-      <canvas id="divisionChart"></canvas>
-    </div>
+  <div class="chartcard">
+    <div class="ctitle">Staff Daily Progress — Last 7 Days</div>
+    <div class="stafftable-wrap"><table class="stafftable" id="staffTable"></table></div>
   </div>
 
   <div class="section-label">Performance</div>
@@ -158,6 +158,7 @@ const SHEET_ID = "1J5m0ai1eTZplO2Hz9jWhtJEjVe0757dHMq7Ckl6Olh0";
 const SHEET_NAME = "Dashboard";          // tab holding the KPI cells
 const DIVISION_SHEET_NAME = "Division Master";
 const DAILY_LOG_SHEET_NAME = "Daily Log";
+const STAFF_SHEET_NAME = "Staff Master";
 
 /* ============================================================
    Helpers — data is loaded via JSONP (a <script> tag), not fetch().
@@ -214,6 +215,27 @@ function todaySheetDateLiteral(){
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function sheetDateLiteral(d){
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function dayKey(d){ return sheetDateLiteral(d); } // yyyy-mm-dd used as a stable grouping key
+
+function lastNCalendarDays(n){
+  const days = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    days.push(d);
+  }
+  return days;
 }
 
 function cellVal(cell){
@@ -278,11 +300,15 @@ async function loadDashboard(isManual){
 
   try {
     const todayLiteral = todaySheetDateLiteral();
-    const [kpi, divs, trend, todayStats] = await Promise.all([
+    const last7Days = lastNCalendarDays(7);
+    const weekStartLiteral = sheetDateLiteral(last7Days[0]);
+    const [kpi, divs, trend, todayStats, staffRoster, weekEntries] = await Promise.all([
       fetchGviz(SHEET_NAME, "B4:F5"),
       fetchGviz(DIVISION_SHEET_NAME, "B4:G10"),
       fetchGviz(SHEET_NAME, "I4:K200"),
       fetchGvizQuery(DAILY_LOG_SHEET_NAME, `select sum(G), sum(H) where B = date '${todayLiteral}'`),
+      fetchGviz(STAFF_SHEET_NAME, "B4:E21"),
+      fetchGvizQuery(DAILY_LOG_SHEET_NAME, `select B, C, sum(H) where C is not null and B >= date '${weekStartLiteral}' group by B, C`),
     ]);
 
     /* ---- KPI cards ---- */
@@ -378,8 +404,8 @@ async function loadDashboard(isManual){
 
     document.getElementById("loadedAt").textContent = new Date().toLocaleString();
 
-    /* ---- Charts ---- */
-    buildCharts(trendRows, divRows, total);
+    /* ---- Staff Daily Progress table ---- */
+    buildStaffTable(staffRoster, weekEntries, last7Days);
 
   } catch (e) {
     showError(e.message || String(e));
@@ -389,93 +415,58 @@ async function loadDashboard(isManual){
 }
 
 /* ============================================================
-   Chart.js setup — dark theme to match the rest of the page
+   Staff Daily Progress table (last 7 calendar days)
    ============================================================ */
-let cumulativeChartInstance = null;
-let divisionChartInstance = null;
+function buildStaffTable(staffRoster, weekEntries, last7Days){
+  // Roster: [{id, name, division}], in the order they appear on Staff Master
+  const roster = staffRoster.table.rows.map(r => ({
+    id: cellVal(r.c[0]),
+    name: cellVal(r.c[1]),
+    division: cellVal(r.c[3]),
+  })).filter(r => r.id);
 
-function buildCharts(trendRows, divRows, total){
-  if (typeof Chart === "undefined") return; // CDN blocked/offline — page still works without charts
-
-  Chart.defaults.color = "#7d8a9a";
-  Chart.defaults.borderColor = "#212a35";
-  Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif";
-
-  /* ---- Cumulative Meters Completed (line) ---- */
-  const loggedRows = trendRows.filter(r => r.daily > 0 || r.date <= new Date());
-  let running = 0;
-  const cumPoints = trendRows.map(r => { running += r.daily; return running; });
-  const labels = trendRows.map(r => r.date.toLocaleDateString(undefined, { month: "short", day: "numeric" }));
-
-  const cumCtx = document.getElementById("cumulativeChart");
-  if (cumulativeChartInstance) cumulativeChartInstance.destroy();
-  cumulativeChartInstance = new Chart(cumCtx, {
-    type: "line",
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: "Cumulative Completed",
-          data: cumPoints,
-          borderColor: "#3ddc84",
-          backgroundColor: "rgba(61,220,132,0.12)",
-          fill: true,
-          tension: 0.25,
-          pointRadius: 0,
-          borderWidth: 2,
-        },
-        {
-          label: "Target",
-          data: labels.map(() => total),
-          borderColor: "#f5a623",
-          borderDash: [6, 6],
-          borderWidth: 1.5,
-          pointRadius: 0,
-          fill: false,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } } },
-      scales: {
-        x: { grid: { color: "#1a212a" }, ticks: { maxTicksLimit: 8, font: { size: 10 } } },
-        y: { grid: { color: "#1a212a" }, ticks: { font: { size: 10 },
-              callback: (v) => v >= 1000 ? (v / 1000) + "k" : v } },
-      },
-    },
+  // weekEntries rows: c[0]=date, c[1]=Staff ID, c[2]=sum(Meters Completed) for that id+date
+  const dailyMap = {}; // { staffId: { "yyyy-mm-dd": total } }
+  (weekEntries.table.rows || []).forEach(row => {
+    const c = row.c;
+    const d = parseGvizDate(cellVal(c[0]));
+    const id = cellVal(c[1]);
+    const val = cellVal(c[2]) || 0;
+    if (!d || !id) return;
+    const key = dayKey(d);
+    if (!dailyMap[id]) dailyMap[id] = {};
+    dailyMap[id][key] = (dailyMap[id][key] || 0) + val;
   });
-  cumCtx.parentElement.style.height = "280px";
 
-  /* ---- Target vs Completed by Division (bar) ---- */
-  const divLabels = divRows.map(r => cellVal(r.c[0])).filter(Boolean);
-  const divTargets = divRows.map(r => cellVal(r.c[2]) || 0);
-  const divCompleted = divRows.map(r => cellVal(r.c[3]) || 0);
+  const dayCols = last7Days.map(d => ({
+    key: dayKey(d),
+    label: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+  }));
 
-  const divCtx = document.getElementById("divisionChart");
-  if (divisionChartInstance) divisionChartInstance.destroy();
-  divisionChartInstance = new Chart(divCtx, {
-    type: "bar",
-    data: {
-      labels: divLabels,
-      datasets: [
-        { label: "Target", data: divTargets, backgroundColor: "#2a323d", borderRadius: 4 },
-        { label: "Completed", data: divCompleted, backgroundColor: "#3ddc84", borderRadius: 4 },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } } },
-      scales: {
-        x: { grid: { display: false }, ticks: { font: { size: 11 } } },
-        y: { grid: { color: "#1a212a" }, ticks: { font: { size: 10 },
-              callback: (v) => v >= 1000 ? (v / 1000) + "k" : v } },
-      },
-    },
+  const table = document.getElementById("staffTable");
+  if (roster.length === 0) {
+    table.innerHTML = `<tr><td class="empty-note">Staff Master data not available.</td></tr>`;
+    return;
+  }
+
+  let head = `<tr><th class="name-col">Staff</th>${dayCols.map(d => `<th>${d.label}</th>`).join("")}<th>Total</th></tr>`;
+  let body = "";
+  roster.forEach(person => {
+    const personDaily = dailyMap[person.id] || {};
+    let rowTotal = 0;
+    const cells = dayCols.map(d => {
+      const v = personDaily[d.key] || 0;
+      rowTotal += v;
+      return `<td class="${v > 0 ? "hasval" : "zero"}">${v > 0 ? fmtNum(v) : "–"}</td>`;
+    }).join("");
+    body += `<tr>
+      <td class="name-cell">${person.name || person.id}<span class="division">${person.division || ""}</span></td>
+      ${cells}
+      <td class="total-cell">${fmtNum(rowTotal)}</td>
+    </tr>`;
   });
-  divCtx.parentElement.style.height = "280px";
+
+  table.innerHTML = head + body;
 }
 
 // Initial load, then silently re-sync every 3 minutes.
