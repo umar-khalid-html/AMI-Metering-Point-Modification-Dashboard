@@ -157,6 +157,7 @@
 const SHEET_ID = "1J5m0ai1eTZplO2Hz9jWhtJEjVe0757dHMq7Ckl6Olh0";
 const SHEET_NAME = "Dashboard";          // tab holding the KPI cells
 const DIVISION_SHEET_NAME = "Division Master";
+const DAILY_LOG_SHEET_NAME = "Daily Log";
 
 /* ============================================================
    Helpers — data is loaded via JSONP (a <script> tag), not fetch().
@@ -195,8 +196,24 @@ function gvizUrl(sheet, range){
   return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=${encodeURIComponent(sheet)}&range=${range}`;
 }
 
+function gvizQueryUrl(sheet, tq){
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=${encodeURIComponent(sheet)}&tq=${encodeURIComponent(tq)}`;
+}
+
 async function fetchGviz(sheet, range){
   return jsonp(gvizUrl(sheet, range));
+}
+
+async function fetchGvizQuery(sheet, tq){
+  return jsonp(gvizQueryUrl(sheet, tq));
+}
+
+function todaySheetDateLiteral(){
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function cellVal(cell){
@@ -260,10 +277,12 @@ async function loadDashboard(isManual){
   document.getElementById("errBox").innerHTML = ""; // clear any stale error from a previous attempt
 
   try {
-    const [kpi, divs, trend] = await Promise.all([
+    const todayLiteral = todaySheetDateLiteral();
+    const [kpi, divs, trend, todayStats] = await Promise.all([
       fetchGviz(SHEET_NAME, "B4:F5"),
       fetchGviz(DIVISION_SHEET_NAME, "B4:G10"),
       fetchGviz(SHEET_NAME, "I4:K200"),
+      fetchGvizQuery(DAILY_LOG_SHEET_NAME, `select sum(G), sum(H) where B = date '${todayLiteral}'`),
     ]);
 
     /* ---- KPI cards ---- */
@@ -276,8 +295,14 @@ async function loadDashboard(isManual){
     const completed = kMap["Total Completed"] || 0;
     const remaining = kMap["Remaining"] || 0;
     const completePct = kMap["% Complete"] || 0;
-    const completionRate = kMap["Completion Rate"] || 0;
-    const carryoverRate = 1 - completionRate;
+
+    /* Carryover Rate = share of TODAY's assigned meters not finished today,
+       queried fresh from the Daily Log for today's date only (not an all-time average). */
+    const todayRow = (todayStats.table.rows && todayStats.table.rows[0]) ? todayStats.table.rows[0].c : [];
+    const todayAssigned = cellVal(todayRow[0]) || 0;
+    const todayCompleted = cellVal(todayRow[1]) || 0;
+    const hasTodayData = todayAssigned > 0;
+    const carryoverRate = hasTodayData ? Math.max(0, (todayAssigned - todayCompleted) / todayAssigned) : null;
 
     const kpiCards = document.getElementById("kpiCards");
     kpiCards.innerHTML = `
@@ -285,7 +310,7 @@ async function loadDashboard(isManual){
       <div class="card"><div class="k">Completed</div><div class="v green">${fmtNum(completed)}</div></div>
       <div class="card"><div class="k">Remaining</div><div class="v">${fmtNum(remaining)}</div></div>
       <div class="card"><div class="k">% Complete</div><div class="v green">${pct(completePct)}</div></div>
-      <div class="card"><div class="k">Carryover Rate</div><div class="v ${carryoverRate <= 0.1 ? "green" : carryoverRate <= 0.3 ? "amber" : "red"}">${pct(carryoverRate)}</div><div class="sub">of assigned meters roll to next day</div></div>
+      <div class="card"><div class="k">Carryover Rate</div><div class="v ${!hasTodayData ? "" : carryoverRate <= 0.1 ? "green" : carryoverRate <= 0.3 ? "amber" : "red"}">${hasTodayData ? pct(carryoverRate) : "—"}</div><div class="sub">${hasTodayData ? "of today's assigned meters" : "no meters assigned yet today"}</div></div>
     `;
 
     const donePctNum = completePct * 100;
@@ -325,7 +350,7 @@ async function loadDashboard(isManual){
     const gaugeRow = document.getElementById("gaugeRow");
     gaugeRow.innerHTML =
       ringHTML(completePct * 100, "var(--green)", "Overall Complete") +
-      ringHTML(carryoverRate * 100, carryoverRate <= 0.1 ? "var(--green)" : carryoverRate <= 0.3 ? "var(--amber)" : "var(--red)", "Carryover Rate") +
+      ringHTML(hasTodayData ? carryoverRate * 100 : 0, !hasTodayData ? "var(--muted)" : carryoverRate <= 0.1 ? "var(--green)" : carryoverRate <= 0.3 ? "var(--amber)" : "var(--red)", "Carryover Rate") +
       ringHTML(divRows.length ? (divRows.filter(r => (cellVal(r.c[5]) || 0) >= (completePct || 0)).length / divRows.length) * 100 : 0,
                 "var(--amber)", "Divisions On Pace");
 
