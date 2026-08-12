@@ -99,15 +99,21 @@
   .chartcard .ctitle{ font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--muted);
                        font-weight:700; margin-bottom:14px; }
   .stafftable-wrap{ overflow-x:auto; }
-  table.stafftable{ border-collapse:collapse; width:100%; font-size:12px; font-family:var(--mono); white-space:nowrap; }
-  table.stafftable th, table.stafftable td{ padding:8px 12px; text-align:center; border-bottom:1px solid var(--panel-border); }
-  table.stafftable th{ color:var(--muted); text-transform:uppercase; font-size:10px; letter-spacing:0.5px; font-weight:700; }
+  table.stafftable{ border-collapse:collapse; width:100%; font-size:12px; font-family:var(--mono); white-space:nowrap;
+                    border:1px solid var(--panel-border); }
+  table.stafftable th, table.stafftable td{ padding:8px 12px; text-align:center;
+                    border:1px solid var(--panel-border); }
+  table.stafftable th{ color:var(--muted); text-transform:uppercase; font-size:10px; letter-spacing:0.5px;
+                    font-weight:700; background:#161d26; }
   table.stafftable td.name-cell, table.stafftable th.name-col{ text-align:left; font-family:var(--sans); }
   table.stafftable td.name-cell .division{ color:var(--muted); font-size:10px; display:block; }
   table.stafftable td.zero{ color:#3a4452; }
   table.stafftable td.hasval{ color:var(--green); font-weight:700; }
-  table.stafftable td.total-cell{ font-weight:700; color:var(--text); border-left:1px solid var(--panel-border); }
-  table.stafftable tr:hover td{ background:#151c25; }
+  table.stafftable td.total-cell{ font-weight:700; color:var(--text); background:#161d26; }
+  table.stafftable tr:nth-child(even) td{ background:#10151c; }
+  table.stafftable tr:nth-child(even) td.total-cell,
+  table.stafftable tr:nth-child(even) th{ background:#161d26; }
+  table.stafftable tr:hover td{ background:#1a2330; }
 
   @media (max-width:760px){
     .trendrow{ grid-template-columns:repeat(4,1fr); }
@@ -136,17 +142,17 @@
   <div class="section-label">Divisions</div>
   <div class="divgrid" id="divGrid"></div>
 
-  <div class="section-label">Trends</div>
-  <div class="chartcard">
-    <div class="ctitle">Staff Daily Progress — Last 7 Days</div>
-    <div class="stafftable-wrap"><table class="stafftable" id="staffTable"></table></div>
-  </div>
-
   <div class="section-label">Performance</div>
   <div class="gaugerow" id="gaugeRow"></div>
 
   <div class="section-label">Last 7 Days — Meters Completed</div>
   <div class="trendrow" id="trendRow"></div>
+
+  <div class="section-label">Trends</div>
+  <div class="chartcard">
+    <div class="ctitle">Staff Daily Progress — Last 7 Days</div>
+    <div class="stafftable-wrap"><table class="stafftable" id="staffTable"></table></div>
+  </div>
 
   <div id="errBox"></div>
 
