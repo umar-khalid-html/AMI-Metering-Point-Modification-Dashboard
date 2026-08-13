@@ -85,12 +85,59 @@
                display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-weight:700; font-size:16px; }
   .gauge .glabel{ font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); }
 
-  .trendrow{ display:grid; grid-template-columns:repeat(7,1fr); gap:12px; }
-  .trendcard{ background:var(--panel); border:1px solid var(--panel-border); border-radius:10px; padding:12px; }
-  .trendcard .tdate{ font-size:11px; color:var(--muted); font-family:var(--mono); margin-bottom:8px; }
-  .trendcard .bars{ display:flex; align-items:flex-end; height:70px; }
-  .trendcard .bars .fill{ width:100%; background:var(--green); border-radius:3px 3px 0 0; min-height:2px; }
-  .trendcard .tval{ font-family:var(--mono); font-weight:700; font-size:13px; margin-top:6px; }
+  /* Compact 7-day bar trend: separate medium-width bar for each date */
+  .trendrow{
+    display:grid;
+    grid-template-columns:repeat(7,1fr);
+    gap:10px;
+    height:145px;
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:10px;
+    padding:10px 12px 8px;
+    position:relative;
+    overflow:hidden;
+    background-image:linear-gradient(to bottom, rgba(125,138,154,.14) 1px, transparent 1px);
+    background-size:100% 25%;
+  }
+  .trendcard{
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    justify-content:flex-end;
+    align-items:center;
+    position:relative;
+    z-index:1;
+  }
+  .trendcard .tdate{
+    font-size:10px;
+    color:var(--muted);
+    font-family:var(--mono);
+    margin-top:5px;
+    white-space:nowrap;
+  }
+  .trendcard .bars{
+    width:100%;
+    max-width:34px;
+    height:94px;
+    display:flex;
+    align-items:flex-end;
+    justify-content:center;
+    border-bottom:1px solid rgba(125,138,154,.18);
+  }
+  .trendcard .bars .fill{
+    width:12px;
+    background:var(--green);
+    border-radius:2px 2px 0 0;
+    min-height:2px;
+  }
+  .trendcard .tval{
+    font-family:var(--mono);
+    font-weight:700;
+    font-size:11px;
+    margin-bottom:3px;
+    white-space:nowrap;
+  }
 
   .empty-note{ color:var(--muted); font-size:12px; font-family:var(--mono); padding:20px; text-align:center; }
   .err-note{ color:var(--red); font-size:12px; font-family:var(--mono); padding:14px; border:1px solid var(--red-dim); border-radius:8px; background:var(--red-dim); margin-top:10px; }
@@ -116,7 +163,7 @@
   table.stafftable tr:hover td{ background:#1a2330; }
 
   @media (max-width:760px){
-    .trendrow{ grid-template-columns:repeat(4,1fr); }
+    .trendrow{ grid-template-columns:repeat(4,1fr); height:145px; }
   }
 </style>
 </head>
@@ -310,7 +357,7 @@ async function loadDashboard(isManual){
     const weekStartLiteral = sheetDateLiteral(last7Days[0]);
     const [kpi, divs, trend, todayStats, staffRoster, weekEntries] = await Promise.all([
       fetchGviz(SHEET_NAME, "B4:F5"),
-      fetchGviz(DIVISION_SHEET_NAME, "B4:G10"),
+      fetchGviz(DIVISION_SHEET_NAME, "B4:G200"),
       fetchGviz(SHEET_NAME, "I4:K200"),
       fetchGvizQuery(DAILY_LOG_SHEET_NAME, `select sum(G), sum(H) where B = date '${todayLiteral}'`),
       fetchGviz(STAFF_SHEET_NAME, "B4:E21"),
@@ -361,11 +408,11 @@ async function loadDashboard(isManual){
       const done = cellVal(c[3]) || 0;
       const rem = cellVal(c[4]) || 0;
       const p = cellVal(c[5]) || 0;
-      if (!code) return;
+      if (!code || String(code).toUpperCase() === "TOTAL") return;
       divGrid.innerHTML += `
         <div class="divcard">
-          <div class="name">${code}</div>
-          <div class="area">${area || ""}</div>
+          <div class="name">${area || code}</div>
+          <div class="area">${area ? code : ""}</div>
           <div class="bar"><i style="width:${(p * 100).toFixed(1)}%"></i></div>
           <div class="nums">
             <span>Target <b>${fmtNum(target)}</b></span>
@@ -398,12 +445,12 @@ async function loadDashboard(isManual){
       trendRow.innerHTML = `<div class="empty-note" style="grid-column:1/-1">No entries logged yet — this fills in once the Daily Log has data.</div>`;
     } else {
       last7.forEach(r => {
-        const h = Math.max(4, Math.round((r.daily / maxVal) * 60));
+        const h = Math.max(3, Math.round((r.daily / maxVal) * 82));
         trendRow.innerHTML += `
           <div class="trendcard">
-            <div class="tdate">${r.date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div>
-            <div class="bars"><div class="fill" style="height:${h}px"></div></div>
             <div class="tval">${fmtNum(r.daily)}</div>
+            <div class="bars"><div class="fill" style="height:${h}px"></div></div>
+            <div class="tdate">${r.date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div>
           </div>`;
       });
     }
